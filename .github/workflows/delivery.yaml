@@ -1,0 +1,97 @@
+# Учебный CD-сценарий в режиме dry run.
+#
+# Тестового сервера в этой работе нет, поэтому доставка не выполняется, а
+# моделируется: workflow связывает версию образа, проверки, команды обновления
+# сервиса, smoke test и откат в одном управляемом процессе и печатает в лог те
+# команды, которые выполнили бы реальное обновление.
+name: Test Delivery Dry Run
+
+on:
+  # Доставка не должна запускаться на каждый push: версию в тестовую среду
+  # выкатывают осознанно, поэтому запуск только ручной.
+  workflow_dispatch:
+
+jobs:
+  build:
+    name: Версия образа
+    runs-on: ubuntu-latest
+    outputs:
+      # тег версии публикуется один раз и дальше используется всеми jobs
+      image-tag: ${{ steps.set_tag.outputs.tag }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set image tag
+        id: set_tag
+        run: |
+          TAG="test-${GITHUB_SHA::12}"
+          echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
+          echo "Версия для доставки: ${TAG}"
+
+  smoke_api_tests_stub:
+    name: Проверка API (заглушка)
+    runs-on: ubuntu-latest
+    needs: build
+    steps:
+      - run: echo "Проверили бы API образа ${{ needs.build.outputs.image-tag }}"
+      - name: Print smoke test commands
+        run: |
+          echo "curl -f http://test.example.local:8080/health"
+          echo "curl -f -X POST http://test.example.local:8080/predict \\"
+          echo "  -H 'Content-Type: application/json' \\"
+          echo "  --data-raw '{\"sepal_length\":5.1,\"sepal_width\":3.5,\"petal_length\":1.4,\"petal_width\":0.2}'"
+
+  docs_checks:
+    name: Проверка документации
+    runs-on: ubuntu-latest
+    # зависит только от build и не зависит от smoke_api_tests_stub:
+    # обе проверки идут параллельно
+    needs: build
+    steps:
+      - uses: actions/checkout@v4
+      - name: README на месте
+        run: test -f README.md
+      - name: Команды доставки описаны в README
+        run: grep -q "Доставка (dry run)" README.md
+      - run: echo "README найден, раздел про доставку описан."
+
+  deploy_dry_run:
+    name: Доставка (dry run)
+    runs-on: ubuntu-latest
+    # доставка ждет версию и ВСЕ проверки
+    needs:
+      - build
+      - smoke_api_tests_stub
+      - docs_checks
+    # success() подтверждает, что все предыдущие jobs завершились успешно;
+    # доставка выполняется только из основной ветки
+    if: ${{ success() && github.ref == 'refs/heads/main' }}
+    env:
+      IMAGE_NAME: registry.example.local/ml-api
+      IMAGE_TAG: ${{ needs.build.outputs.image-tag }}
+      PREVIOUS_TAG: previous-stable
+    steps:
+      - name: Print deploy commands
+        run: |
+          echo "Доставляемая версия: ${IMAGE_NAME}:${IMAGE_TAG}"
+          echo "docker pull ${IMAGE_NAME}:${IMAGE_TAG}"
+          echo "docker stop ml-api-test || true"
+          echo "docker rm ml-api-test || true"
+          echo "docker run -d --name ml-api-test -p 8080:8000 \\"
+          echo "  -e MODEL_PATH=/app/models/model.pkl ${IMAGE_NAME}:${IMAGE_TAG}"
+
+      - name: Print smoke test commands
+        run: |
+          echo "curl -f http://test.example.local:8080/health"
+          echo "curl -f -X POST http://test.example.local:8080/predict \\"
+          echo "  -H 'Content-Type: application/json' \\"
+          echo "  --data-raw '{\"sepal_length\":5.1,\"sepal_width\":3.5,\"petal_length\":1.4,\"petal_width\":0.2}'"
+
+      - name: Print rollback commands
+        run: |
+          echo "Откат на предыдущую проверенную версию: ${IMAGE_NAME}:${PREVIOUS_TAG}"
+          echo "docker stop ml-api-test || true"
+          echo "docker rm ml-api-test || true"
+          echo "docker run -d --name ml-api-test -p 8080:8000 \\"
+          echo "  -e MODEL_PATH=/app/models/model.pkl ${IMAGE_NAME}:${PREVIOUS_TAG}"
+          echo "curl -f http://test.example.local:8080/health"
