@@ -1,0 +1,45 @@
+# Учебный интеграционный стенд: API-сервис и клиент в общей сети.
+# Запуск: docker compose up --build -d
+services:
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: ml-api:practice6
+    # Левая часть — порт хоста (переопределяется переменной API_HOST_PORT),
+    # правая — порт внутри контейнера.
+    ports:
+      - "${API_HOST_PORT:-8080}:8000"
+    environment:
+      MODEL_PATH: /app/models/model.pkl
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    networks:
+      - app_net
+
+  client:
+    build:
+      context: ./client
+      dockerfile: Dockerfile
+    image: ml-client:practice6
+    environment:
+      # api — DNS-имя сервиса внутри сети Compose
+      API_URL: http://api:8000
+      RESULT_PATH: /results/prediction.json
+    depends_on:
+      api:
+        # клиент стартует только после того, как healthcheck api стал healthy
+        condition: service_healthy
+    volumes:
+      # слева каталог хоста, справа каталог внутри контейнера
+      - ./results:/results
+    networks:
+      - app_net
+    restart: "no"
+
+networks:
+  app_net:
+    driver: bridge
