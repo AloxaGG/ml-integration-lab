@@ -1,7 +1,48 @@
-# ML Integration Lab 1
+# ML Integration Lab
 
-Учебный проект практической работы 1 по дисциплине «Разработка и интеграция»
-(магистратура 01.04.02).
+[![CI](https://github.com/AloxaGG/ml-integration-lab/actions/workflows/ci.yaml/badge.svg)](https://github.com/AloxaGG/ml-integration-lab/actions/workflows/ci.yaml)
+[![Publish API documentation](https://github.com/AloxaGG/ml-integration-lab/actions/workflows/publish-api-docs.yaml/badge.svg)](https://github.com/AloxaGG/ml-integration-lab/actions/workflows/publish-api-docs.yaml)
+
+Учебный пример по дисциплине «Разработка и интеграция» (магистратура 01.04.02):
+путь от исследовательского notebook до ML-сервиса с тестами, контейнером,
+интеграционным стендом, CI/CD и опубликованной документацией.
+
+Репозиторий показывает не только итоговый код, но и **процесс**: каждая
+практическая работа выполнена в отдельной ветке и влита через pull request с
+описанием цели, способа проверки и рисков.
+
+- **Документация API:** <https://aloxagg.github.io/ml-integration-lab/api/>
+- **Запуски CI/CD:** [вкладка Actions](https://github.com/AloxaGG/ml-integration-lab/actions)
+- **История изменений:** [список pull request](https://github.com/AloxaGG/ml-integration-lab/pulls?q=is%3Apr+is%3Amerged)
+
+## Содержание по практическим работам
+
+| Практика | Что добавлено | Разделы README | Pull request |
+| --- | --- | --- | --- |
+| 1 | структура проекта, разделение обучения и инференса, пути от корня, smoke-тесты | [Структура](#структура-проекта), [Обучение](#обучение-модели), [Предсказание](#предсказание) | — |
+| 2 | параметр `--format text\|json`, работа через ветку, review и разрешение конфликта | [Формат вывода](#формат-вывода), [Внесение изменений](#внесение-изменений) | [#1](https://github.com/AloxaGG/ml-integration-lab/pull/1) |
+| 3 | FastAPI-сервис: `/health`, `/predict`, Pydantic-схемы, OpenAPI | [API-сервис](#api-сервис) | [#2](https://github.com/AloxaGG/ml-integration-lab/pull/2) |
+| 4 | тесты модульные, API, негативные и интеграционные | [Тестирование](#тестирование) | [#3](https://github.com/AloxaGG/ml-integration-lab/pull/3) |
+| 5 | `Dockerfile`, `.dockerignore`, запуск в контейнере | [Запуск в Docker](#запуск-в-docker) | [#4](https://github.com/AloxaGG/ml-integration-lab/pull/4) |
+| 6 | `compose.yaml`: API + клиент, сеть, healthcheck, bind mount | [Интеграционный стенд](#интеграционный-стенд-docker-compose) | [#5](https://github.com/AloxaGG/ml-integration-lab/pull/5) |
+| 7 | CI: проверки, тесты и сборка образа | [CI/CD](#cicd) | [#6](https://github.com/AloxaGG/ml-integration-lab/pull/6) |
+| 8 | workflow доставки в режиме dry run и откат | [Доставка (dry run)](#доставка-dry-run) | [#7](https://github.com/AloxaGG/ml-integration-lab/pull/7) |
+| 9 | автоматическая публикация Swagger UI | [Документация API](#документация-api-опубликованная) | [#8](https://github.com/AloxaGG/ml-integration-lab/pull/8) |
+
+## Быстрый старт
+
+```bash
+git clone https://github.com/AloxaGG/ml-integration-lab.git
+cd ml-integration-lab
+python -m venv .venv && .venv/Scripts/Activate.ps1   # Linux/macOS: source .venv/bin/activate
+pip install -r requirements.txt
+
+pytest                                   # 31 passed
+python src/train.py                      # обучение модели -> models/model.pkl
+python -m uvicorn app.api:app --reload   # сервис на http://127.0.0.1:8000
+```
+
+Подробности по каждому шагу — в разделах ниже.
 
 ## Цель проекта
 
@@ -16,7 +57,7 @@
 - **инференс** — `src/predict.py` загружает *уже сохраненный* артефакт и
   предсказывает класс для одного объекта из CSV.
 
-## Исходная заготовка
+## Исходная заготовка (практика 1)
 
 Исходником послужила выданная преподавателем заготовка `starter_ml.ipynb`
 (получена в виде ZIP-архива вместе с `sample.csv` и `requirements-starter.txt`).
@@ -639,9 +680,6 @@ git branch -M main
 git remote add origin https://github.com/<username>/<repository>.git
 git push -u origin main
 ```
-
-Для GitVerse команда та же, меняется только адрес:
-`https://gitverse.ru/<username>/<repository>.git`.
 
 ## Внесение изменений
 
