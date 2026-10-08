@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>ML Integration API — документация</title>
+  <!-- Файлы Swagger UI лежат рядом в репозитории: CDN не используется,
+       а пути относительные, потому что сайт публикуется по адресу
+       вида https://<owner>.github.io/<repo>/api/ -->
+  <link rel="stylesheet" href="./swagger-ui.css">
+</head>
+<body>
+  <div id="swagger-ui"></div>
+  <script src="./swagger-ui-bundle.js"></script>
+  <script>
+    window.onload = () => SwaggerUIBundle({
+      url: "./openapi.json",
+      dom_id: "#swagger-ui",
+      deepLinking: true
+    });
+  </script>
+</body>
+</html>
