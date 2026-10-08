@@ -416,7 +416,8 @@ docker compose ps -a
 docker compose logs api
 docker compose logs client
 curl http://localhost:8080/health
-cat results/prediction.json          # PowerShell: Get-Content .esults\prediction.json
+cat results/prediction.json          # PowerShell: Get-Content .\results\prediction.json
+esults\prediction.json
 ```
 
 ```json
@@ -466,6 +467,47 @@ cat results/prediction.json
 
 Сам файл результата в Git не хранится (он в `.gitignore`), каталог остаётся в
 репозитории за счёт `results/.gitkeep`.
+
+## CI/CD
+
+Конвейер описан в [`.github/workflows/ci.yaml`](.github/workflows/ci.yaml) и
+хранится в репозитории вместе с кодом: он меняется через те же ветки и pull
+request, поэтому его история видна наравне с историей приложения.
+
+**События запуска**
+
+| Событие | Когда срабатывает | Зачем |
+| --- | --- | --- |
+| `push` в `main` | изменения в `app/`, `src/`, `client/`, `tests/`, `Dockerfile`, `requirements.txt`, `pytest.ini`, сам workflow | основная ветка всегда проверена |
+| `pull_request` | любой PR | ошибки видны до слияния |
+| `workflow_dispatch` | ручной запуск из интерфейса | перепроверка без новых коммитов |
+
+**Jobs**
+
+1. `check` — установка зависимостей, проверка синтаксиса `python -m compileall`
+   и запуск `pytest -q`. Тесты идут без ручного старта uvicorn и без браузера.
+2. `build-image` — связана с `check` через `needs`, поэтому стартует только
+   после успешных проверок. Обучает артефакт модели (`python src/train.py`),
+   собирает образ по `Dockerfile` и прогоняет smoke-тест: запускает контейнер и
+   проверяет `/health` и `/predict`. Образ никуда не публикуется (`push: false`).
+
+Сборка выполняется на runner-е средствами buildx: образ собирается в
+изолированной среде CI, а не на компьютере студента, и не зависит от локально
+установленного Docker.
+
+Артефакт `models/model.pkl` не хранится в Git, поэтому в CI он создаётся до
+сборки образа. Внутри `Dockerfile` обучения нет — образ только копирует готовый
+файл.
+
+**Локальная проверка перед push** (те же команды, что и в CI):
+
+```bash
+pytest -q
+python -m compileall -q app src client
+docker build -t ml-api:local .
+```
+
+Ссылка на запуски: [вкладка Actions репозитория](https://github.com/AloxaGG/ml-integration-lab/actions).
 
 ## Конфигурация и зависимости
 
