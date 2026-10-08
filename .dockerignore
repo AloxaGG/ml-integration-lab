@@ -1,0 +1,38 @@
+# Git и история
+.git
+.gitignore
+.github
+
+# Виртуальные окружения
+.venv
+venv
+env
+
+# Кэши Python и тестов
+__pycache__
+*.py[cod]
+.pytest_cache
+.mypy_cache
+.ruff_cache
+.ipynb_checkpoints
+
+# Файлы IDE и ОС
+.idea
+.vscode
+Thumbs.db
+.DS_Store
+
+# Локальные секреты и настройки
+.env
+*.env
+
+# Материалы курса, отчеты и результаты запусков
+Labs
+reports
+results
+
+# Не нужно в образе сервиса: тесты, ноутбуки, данные для CLI-примеров
+tests
+notebooks
+pytest.ini
+README.md
