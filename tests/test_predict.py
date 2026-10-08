@@ -81,6 +81,7 @@ def run_predict_script(*args):
         capture_output=True,
         text=True,
         encoding="utf-8",
+        errors="replace",
         cwd=config.PROJECT_ROOT.parent,
     )
 
@@ -102,6 +103,17 @@ def test_predict_script_json_output(model_path):
     payload = json.loads(result.stdout)
     assert payload["predicted_class"] in (0, 1, 2)
     assert payload["predicted_name"] == config.TARGET_NAMES[payload["predicted_class"]]
+
+
+def test_predict_script_json_error_goes_to_stderr(tmp_path):
+    """В режиме json ошибка тоже JSON, а stdout остается пустым."""
+    missing_model = tmp_path / "no_such_model.pkl"
+    result = run_predict_script("--model-path", str(missing_model), "--format", "json")
+
+    assert result.returncode == 1
+    assert result.stdout == ""
+    payload = json.loads(result.stderr)
+    assert "no_such_model.pkl" in payload["error"]
 
 
 def test_predict_script_rejects_unknown_format(model_path):

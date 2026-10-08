@@ -7,6 +7,7 @@
 import argparse
 import csv
 import json
+import sys
 from pathlib import Path
 
 import joblib
@@ -72,6 +73,13 @@ def format_prediction(predicted_class: int, predicted_name: str, output_format: 
     return f"predicted_class={predicted_class}\npredicted_name={predicted_name}"
 
 
+def format_error(message: str, output_format: str) -> str:
+    """Формирует сообщение об ошибке в том же формате, что и результат."""
+    if output_format == "json":
+        return json.dumps({"error": message})
+    return f"error: {message}"
+
+
 def parse_args():
     parser = argparse.ArgumentParser(description="Предсказание класса Iris.")
     parser.add_argument(
@@ -104,7 +112,7 @@ def main() -> int:
         model = load_model(args.model_path)
         features = read_features(args.input_path)
     except PredictError as error:
-        print(f"error: {error}")
+        print(format_error(str(error), args.output_format), file=sys.stderr)
         return 1
 
     predicted_class, predicted_name = predict(model, features)
