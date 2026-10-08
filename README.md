@@ -50,6 +50,11 @@ ml-integration-lab/
 ├── Dockerfile                         # образ API-сервиса
 ├── pytest.ini                         # конфигурация тестов
 ├── compose.yaml                       # интеграционный стенд: api + client
+├── docs/                              # исходники сайта документации
+│   ├── index.html                     # стартовая страница
+│   └── api/                           # Swagger UI и его локальные файлы
+├── scripts/
+│   └── export_openapi.py              # экспорт схемы из app.openapi()
 ├── requirements.txt                   # зафиксированные зависимости
 ├── client/                            # клиентский компонент стенда
 │   ├── Dockerfile                     # отдельный образ клиента
@@ -558,6 +563,47 @@ registry (например, метка `stable`, которая перестав
 вызовы API сервера. Значения `DEPLOY_HOST`, `DEPLOY_USER`, `SSH_KEY`,
 `REGISTRY_TOKEN` должны храниться в секретах CI, а не в репозитории. В этой
 работе секреты не нужны и не добавляются.
+
+## Документация API (опубликованная)
+
+Swagger UI опубликован автоматически:
+**https://aloxagg.github.io/ml-integration-lab/api/**
+(стартовая страница — https://aloxagg.github.io/ml-integration-lab/,
+схема — https://aloxagg.github.io/ml-integration-lab/api/openapi.json).
+
+Как это работает:
+
+1. workflow [`.github/workflows/publish-api-docs.yaml`](.github/workflows/publish-api-docs.yaml)
+   запускается при push в `main` (и вручную через **Run workflow**);
+2. job `build` импортирует приложение и вызывает `app.openapi()` через
+   [`scripts/export_openapi.py`](scripts/export_openapi.py), сохраняя схему в
+   `site/api/openapi.json`, проверяет, что JSON валиден и файлы Swagger UI на
+   месте, и отдаёт каталог `site/` как артефакт Pages;
+3. job `deploy` публикует этот артефакт.
+
+Схема **не хранится в репозитории**: она собирается в CI из кода того коммита,
+который запустил публикацию, поэтому опубликованная документация не может
+разойтись с кодом. Веб-сервер при этом не запускается — `app.openapi()`
+возвращает схему прямо из объекта приложения.
+
+Файлы Swagger UI (`swagger-ui.css`, `swagger-ui-bundle.js`) лежат в
+`docs/api/` — CDN не используется, сайт работает на файлах репозитория. Все
+пути в `docs/api/index.html` относительные (`./openapi.json`), потому что сайт
+публикуется в подкаталоге `/<имя-репозитория>/`.
+
+| Путь в репозитории | Назначение |
+| --- | --- |
+| `docs/index.html` | стартовая страница со ссылкой на `./api/` |
+| `docs/api/index.html` | страница Swagger UI, `url: './openapi.json'` |
+| `docs/api/swagger-ui.css`, `docs/api/swagger-ui-bundle.js` | локальные файлы Swagger UI |
+| `scripts/export_openapi.py` | импортирует `app` и сохраняет `app.openapi()` |
+| `.github/workflows/publish-api-docs.yaml` | собирает `site/` и публикует его |
+
+Локальная проверка экспорта схемы:
+
+```bash
+python scripts/export_openapi.py --output site/api/openapi.json
+```
 
 ## Конфигурация и зависимости
 
