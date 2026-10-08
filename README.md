@@ -509,6 +509,56 @@ docker build -t ml-api:local .
 
 Ссылка на запуски: [вкладка Actions репозитория](https://github.com/AloxaGG/ml-integration-lab/actions).
 
+### Доставка (dry run)
+
+Отдельный workflow
+[`.github/workflows/delivery.yaml`](.github/workflows/delivery.yaml) показывает
+CD-сценарий: какая версия доставляется, какие проверки должны пройти до
+обновления сервиса, какими командами сервис обновляется, как выполняется smoke
+test и как откатиться на предыдущую версию.
+
+**Тестового сервера в учебной работе нет**, поэтому реальная доставка не
+выполняется: jobs печатают в лог команды, которые выполнили бы обновление.
+Адреса `registry.example.local` и `test.example.local` — заглушки.
+
+Запуск только ручной: вкладка **Actions** → **Test Delivery Dry Run** → **Run
+workflow**. Доставку в тестовую среду выкатывают осознанно, а не на каждый push.
+
+| Job | Зависимости | Что делает |
+| --- | --- | --- |
+| `build` | — | формирует тег версии `test-<первые 12 символов SHA>` и публикует его как output `image-tag` через `$GITHUB_OUTPUT` |
+| `smoke_api_tests_stub` | `build` | печатает команды `curl` для `/health` и `/predict` проверяемого образа |
+| `docs_checks` | `build` | проверяет, что README на месте и содержит описание доставки |
+| `deploy_dry_run` | `build`, `smoke_api_tests_stub`, `docs_checks` | печатает команды `docker pull` / `stop` / `rm` / `run`, smoke test и команды отката |
+
+Проверки `smoke_api_tests_stub` и `docs_checks` зависят только от `build`,
+поэтому идут параллельно. `deploy_dry_run` ждёт их все через `needs` и
+запускается при условии `success() && github.ref == 'refs/heads/main'`: доставка
+не должна начинаться, если хоть одна проверка упала или запуск сделан не из
+основной ветки. Тег берётся из `needs.build.outputs.image-tag` — он задаётся в
+одном месте и не может разойтись между jobs.
+
+Команды, которые печатает `deploy_dry_run`:
+
+```bash
+docker pull registry.example.local/ml-api:test-<sha>
+docker stop ml-api-test || true
+docker rm ml-api-test || true
+docker run -d --name ml-api-test -p 8080:8000   -e MODEL_PATH=/app/models/model.pkl registry.example.local/ml-api:test-<sha>
+curl -f http://test.example.local:8080/health
+```
+
+**Откат** выполняется теми же командами, но с предыдущим проверенным тегом
+(`PREVIOUS_TAG=previous-stable`). В рабочем проекте такой тег хранится в
+registry (например, метка `stable`, которая переставляется только после
+успешного smoke test), чтобы всегда была версия, к которой можно вернуться.
+
+**Как заменить dry run на реальную доставку.** Когда появится тестовый сервер,
+`deploy_dry_run` заменяется на `deploy_test`, а команды `echo` — на `ssh` или
+вызовы API сервера. Значения `DEPLOY_HOST`, `DEPLOY_USER`, `SSH_KEY`,
+`REGISTRY_TOKEN` должны храниться в секретах CI, а не в репозитории. В этой
+работе секреты не нужны и не добавляются.
+
 ## Конфигурация и зависимости
 
 Параметры проекта собраны в [`src/config.py`](src/config.py):
