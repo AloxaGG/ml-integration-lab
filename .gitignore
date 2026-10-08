@@ -1,0 +1,35 @@
+# Виртуальные окружения
+.venv/
+venv/
+env/
+ENV/
+
+# Байт-код и кэши Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.ipynb_checkpoints/
+
+# Сборка и дистрибутивы
+build/
+dist/
+*.egg-info/
+
+# Файлы IDE и ОС
+.idea/
+.vscode/
+*.swp
+Thumbs.db
+.DS_Store
+
+# Локальные артефакты обучения (модель воспроизводится командой python src/train.py)
+models/*.pkl
+!models/.gitkeep
+
+# Логи и временные файлы
+*.log
+tmp/
