@@ -49,7 +49,13 @@ ml-integration-lab/
 ├── .dockerignore                      # что не попадает в контекст сборки образа
 ├── Dockerfile                         # образ API-сервиса
 ├── pytest.ini                         # конфигурация тестов
+├── compose.yaml                       # интеграционный стенд: api + client
 ├── requirements.txt                   # зафиксированные зависимости
+├── client/                            # клиентский компонент стенда
+│   ├── Dockerfile                     # отдельный образ клиента
+│   ├── requirements.txt               # зависимости клиента (requests)
+│   └── client.py                      # POST /predict и сохранение ответа
+├── results/                           # сюда клиент кладет prediction.json
 ├── notebooks/
 │   └── source_experiment.ipynb        # безопасная копия исходной заготовки
 ├── data_sample/
@@ -366,6 +372,100 @@ docker rm ml-api-p5
 | `COPY app src models` | код приложения и готовый артефакт модели |
 | `EXPOSE 8000` | документирует порт приложения, но **не** открывает порт на хосте — это делает `-p` |
 | `CMD … --host 0.0.0.0` | внутри контейнера сервис должен слушать все интерфейсы: `127.0.0.1` был бы доступен только изнутри контейнера |
+
+## Интеграционный стенд (Docker Compose)
+
+Стенд поднимает два сервиса: `api` — тот же образ, что в практике 5, и `client` —
+отдельный компонент, который делает один запрос `POST /predict` и сохраняет ответ
+в `results/prediction.json`.
+
+```text
+Командная строка хоста
+        │  http://localhost:8080/health
+        ▼
+┌────────────────┐      сеть app_net      ┌────────────────┐
+│ api            │ ◄───────────────────── │ client         │
+│ :8000          │  http://api:8000       │ POST /predict  │
+└────────────────┘                        └───────┬────────┘
+                                                  │ /results
+                                                  ▼
+                                        ./results на хосте
+```
+
+`api` — это DNS-имя сервиса внутри сети Compose. `localhost` внутри контейнера
+`client` означает сам `client`, поэтому обращение к API идёт по `http://api:8000`.
+Пользователь с хоста ходит на `http://localhost:8080`, потому что этот порт
+опубликован параметром `ports`.
+
+Запуск (модель должна быть обучена, см. раздел «Запуск в Docker»):
+
+```bash
+docker compose config         # проверка конфигурации
+docker compose up --build -d
+docker compose ps -a
+```
+
+`api` поднимается первым; `client` стартует только после того, как healthcheck
+`api` перешёл в состояние `healthy` (`depends_on: condition: service_healthy`).
+Клиент одноразовый: после успешного запроса он завершается со статусом
+`Exited (0)` — это нормальное состояние, а не ошибка.
+
+Проверка результата:
+
+```bash
+docker compose logs api
+docker compose logs client
+curl http://localhost:8080/health
+cat results/prediction.json          # PowerShell: Get-Content .esults\prediction.json
+```
+
+```json
+{
+  "prediction": 0,
+  "predicted_name": "setosa"
+}
+```
+
+Если порт 8080 на хосте занят, задайте другой через переменную `API_HOST_PORT`
+(в `compose.yaml` она подставляется в левую часть `ports`):
+
+```bash
+API_HOST_PORT=8088 docker compose up --build -d
+```
+
+### Диагностический опыт: почему не `localhost`
+
+```bash
+docker compose run --rm -e API_URL=http://localhost:8000 client
+```
+
+```text
+error: запрос к API не выполнен: ... Failed to establish a new connection:
+[Errno 111] Connection refused
+```
+
+Внутри контейнера `client` адрес `localhost` указывает на сам контейнер клиента,
+где на порту 8000 никто не слушает. Опубликованный порт хоста здесь тоже не
+помогает: контейнеры общаются напрямую по сети Compose. Правильный адрес —
+`http://api:8000`, он задан в `compose.yaml`:
+
+```bash
+docker compose run --rm client     # HTTP 200, ответ сохранён
+```
+
+### Остановка
+
+```bash
+docker compose down
+cat results/prediction.json
+```
+
+`down` удаляет контейнеры и сеть проекта, но `results/prediction.json` остаётся
+на хосте: каталог подключён как bind mount `./results:/results`, где левая часть —
+путь на хосте, правая — путь внутри контейнера.
+
+Сам файл результата в Git не хранится (он в `.gitignore`), каталог остаётся в
+репозитории за счёт `results/.gitkeep`.
 
 ## Конфигурация и зависимости
 
