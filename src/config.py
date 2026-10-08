@@ -21,6 +21,10 @@ FEATURE_COLUMNS = (
     "petal_width",
 )
 
+# Формат вывода предсказания: text — строки key=value, json — один JSON-объект
+OUTPUT_FORMATS = ("text", "json")
+DEFAULT_OUTPUT_FORMAT = "text"
+
 # Гиперпараметры обучения
 TEST_SIZE = 0.25
 RANDOM_STATE = 42

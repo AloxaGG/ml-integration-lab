@@ -1,16 +1,25 @@
 """Предсказание класса Iris по сохраненной модели.
 
 Запуск:
-    python src/predict.py [--model-path PATH] [--input PATH]
+    python src/predict.py [--model-path PATH] [--input PATH] [--format {text,json}]
 """
 
 import argparse
 import csv
+import json
+import sys
 from pathlib import Path
 
 import joblib
 
-from config import FEATURE_COLUMNS, MODEL_PATH, SAMPLE_PATH, TARGET_NAMES
+from config import (
+    DEFAULT_OUTPUT_FORMAT,
+    FEATURE_COLUMNS,
+    MODEL_PATH,
+    OUTPUT_FORMATS,
+    SAMPLE_PATH,
+    TARGET_NAMES,
+)
 
 
 class PredictError(Exception):
@@ -55,6 +64,22 @@ def predict(model, features):
     return predicted_class, TARGET_NAMES[predicted_class]
 
 
+def format_prediction(predicted_class: int, predicted_name: str, output_format: str) -> str:
+    """Формирует текст результата в выбранном формате вывода."""
+    if output_format == "json":
+        return json.dumps(
+            {"predicted_class": predicted_class, "predicted_name": predicted_name}
+        )
+    return f"predicted_class={predicted_class}\npredicted_name={predicted_name}"
+
+
+def format_error(message: str, output_format: str) -> str:
+    """Формирует сообщение об ошибке в том же формате, что и результат."""
+    if output_format == "json":
+        return json.dumps({"error": message})
+    return f"error: {message}"
+
+
 def parse_args():
     parser = argparse.ArgumentParser(description="Предсказание класса Iris.")
     parser.add_argument(
@@ -70,6 +95,13 @@ def parse_args():
         dest="input_path",
         help=f"CSV с одним объектом (по умолчанию {SAMPLE_PATH})",
     )
+    parser.add_argument(
+        "--format",
+        choices=OUTPUT_FORMATS,
+        default=DEFAULT_OUTPUT_FORMAT,
+        dest="output_format",
+        help=f"формат вывода результата (по умолчанию {DEFAULT_OUTPUT_FORMAT})",
+    )
     return parser.parse_args()
 
 
@@ -80,12 +112,11 @@ def main() -> int:
         model = load_model(args.model_path)
         features = read_features(args.input_path)
     except PredictError as error:
-        print(f"error: {error}")
+        print(format_error(str(error), args.output_format), file=sys.stderr)
         return 1
 
     predicted_class, predicted_name = predict(model, features)
-    print(f"predicted_class={predicted_class}")
-    print(f"predicted_name={predicted_name}")
+    print(format_prediction(predicted_class, predicted_name, args.output_format))
     return 0
 
 

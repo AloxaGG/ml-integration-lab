@@ -4,6 +4,7 @@
 результат ожидаемого формата. Качество модели здесь не проверяется.
 """
 
+import json
 import subprocess
 import sys
 
@@ -62,21 +63,61 @@ def test_bad_input_file_reports_readable_error(tmp_path):
         predict.read_features(bad_csv)
 
 
-def test_predict_script_runs_end_to_end(model_path):
-    """predict.py запускается как отдельный процесс и печатает ожидаемые строки."""
-    result = subprocess.run(
-        [
-            sys.executable,
-            str(config.PROJECT_ROOT / "src" / "predict.py"),
-            "--model-path",
-            str(model_path),
-        ],
+def test_format_prediction_text_is_default_format():
+    assert config.DEFAULT_OUTPUT_FORMAT == "text"
+    output = predict.format_prediction(0, "setosa", "text")
+    assert output.splitlines() == ["predicted_class=0", "predicted_name=setosa"]
+
+
+def test_format_prediction_json():
+    output = predict.format_prediction(2, "virginica", "json")
+    assert json.loads(output) == {"predicted_class": 2, "predicted_name": "virginica"}
+
+
+def run_predict_script(*args):
+    """Запускает predict.py отдельным процессом не из корня репозитория."""
+    return subprocess.run(
+        [sys.executable, str(config.PROJECT_ROOT / "src" / "predict.py"), *args],
         capture_output=True,
         text=True,
         encoding="utf-8",
+        errors="replace",
         cwd=config.PROJECT_ROOT.parent,
     )
+
+
+def test_predict_script_runs_end_to_end(model_path):
+    """predict.py запускается как отдельный процесс и печатает ожидаемые строки."""
+    result = run_predict_script("--model-path", str(model_path))
 
     assert result.returncode == 0, result.stderr
     assert "predicted_class=" in result.stdout
     assert "predicted_name=" in result.stdout
+
+
+def test_predict_script_json_output(model_path):
+    """С --format json вывод целиком разбирается как один JSON-объект."""
+    result = run_predict_script("--model-path", str(model_path), "--format", "json")
+
+    assert result.returncode == 0, result.stderr
+    payload = json.loads(result.stdout)
+    assert payload["predicted_class"] in (0, 1, 2)
+    assert payload["predicted_name"] == config.TARGET_NAMES[payload["predicted_class"]]
+
+
+def test_predict_script_json_error_goes_to_stderr(tmp_path):
+    """В режиме json ошибка тоже JSON, а stdout остается пустым."""
+    missing_model = tmp_path / "no_such_model.pkl"
+    result = run_predict_script("--model-path", str(missing_model), "--format", "json")
+
+    assert result.returncode == 1
+    assert result.stdout == ""
+    payload = json.loads(result.stderr)
+    assert "no_such_model.pkl" in payload["error"]
+
+
+def test_predict_script_rejects_unknown_format(model_path):
+    result = run_predict_script("--model-path", str(model_path), "--format", "xml")
+
+    assert result.returncode != 0
+    assert "invalid choice" in result.stderr
