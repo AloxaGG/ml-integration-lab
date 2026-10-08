@@ -1,0 +1,68 @@
+# Публикация документации API на GitHub Pages.
+#
+# Схема openapi.json не хранится в репозитории: workflow импортирует приложение,
+# вызывает app.openapi() и кладет результат в каталог сборки. Поэтому
+# опубликованная документация всегда соответствует коммиту, который запустил
+# публикацию.
+name: Publish API documentation
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Параллельные публикации не нужны: важна последняя версия
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: Сборка документации
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install dependencies
+        run: python -m pip install -r requirements.txt
+
+      - name: Build static documentation
+        run: |
+          rm -rf site
+          mkdir -p site/api
+          cp docs/index.html site/index.html
+          cp -R docs/api/. site/api/
+          python scripts/export_openapi.py --output site/api/openapi.json
+          test -s site/api/openapi.json
+          python -m json.tool site/api/openapi.json > /dev/null
+          test -f site/api/index.html
+          test -f site/api/swagger-ui.css
+          test -f site/api/swagger-ui-bundle.js
+          ls -la site site/api
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+
+  deploy:
+    name: Публикация
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
