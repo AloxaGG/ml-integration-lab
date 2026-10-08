@@ -90,7 +90,7 @@ ml-integration-lab/
 ## Установка
 
 ```bash
-git clone https://gitverse.ru/<username>/<repository>.git
+git clone https://github.com/AloxaGG/ml-integration-lab.git
 cd ml-integration-lab
 python -m venv .venv
 ```
@@ -630,13 +630,18 @@ API-сервис; `pytest`, `httpx` — тесты. Точные версии у
 `requirements.txt`.
 Проект проверен на Python 3.13.
 
-## Публикация в GitVerse
+## Публикация репозитория
+
+Если проект собирается с нуля, первая отправка в удалённый репозиторий выглядит так:
 
 ```bash
 git branch -M main
-git remote add origin https://gitverse.ru/<username>/<repository>.git
+git remote add origin https://github.com/<username>/<repository>.git
 git push -u origin main
 ```
+
+Для GitVerse команда та же, меняется только адрес:
+`https://gitverse.ru/<username>/<repository>.git`.
 
 ## Внесение изменений
 
