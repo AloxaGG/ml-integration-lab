@@ -1,0 +1,87 @@
+# CI-конвейер проекта: проверки кода и тесты, затем сборка Docker-образа.
+# Конфигурация хранится в репозитории, поэтому pipeline воспроизводим
+# и меняется через те же ветки и pull request, что и код.
+name: CI
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - app/**
+      - src/**
+      - client/**
+      - tests/**
+      - Dockerfile
+      - requirements.txt
+      - pytest.ini
+      - .github/workflows/ci.yaml
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  check:
+    name: Проверки и тесты
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Syntax check
+        run: python -m compileall -q app src client
+
+      - name: Run tests
+        run: pytest -q
+
+  build-image:
+    name: Сборка образа
+    # Образ собирается только после успешных проверок
+    needs: check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      # Артефакт модели не хранится в Git, поэтому обучается в CI до сборки:
+      # внутри Dockerfile обучения нет, образ только копирует готовый файл.
+      - name: Train model artifact
+        run: |
+          pip install -r requirements.txt
+          python src/train.py
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Build image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: Dockerfile
+          tags: ml-api:${{ github.sha }}
+          push: false
+          load: true
+
+      - name: Smoke test the image
+        run: |
+          docker run -d --name ml-api-ci -p 8080:8000 \
+            -e MODEL_PATH=/app/models/model.pkl ml-api:${{ github.sha }}
+          for i in $(seq 1 20); do
+            curl -fs http://localhost:8080/health && break
+            sleep 2
+          done
+          curl -fs http://localhost:8080/health
+          curl -fs -X POST http://localhost:8080/predict \
+            -H "Content-Type: application/json" \
+            --data-raw '{"sepal_length":5.1,"sepal_width":3.5,"petal_length":1.4,"petal_width":0.2}'
+          docker rm -f ml-api-ci
