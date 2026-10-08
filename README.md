@@ -53,10 +53,16 @@ ml-integration-lab/
 │   └── sample.csv                     # один тестовый объект Iris
 ├── models/
 │   └── model.pkl                      # артефакт обучения (в Git не хранится)
+├── app/
+│   ├── __init__.py                    # пакет HTTP-слоя
+│   ├── api.py                         # FastAPI-приложение: /health и /predict
+│   └── schemas.py                     # Pydantic-схемы запроса и ответа
 ├── src/
+│   ├── __init__.py                    # пакет прикладного слоя
 │   ├── config.py                      # пути и параметры проекта
 │   ├── train.py                       # обучение и сохранение модели
-│   └── predict.py                     # загрузка модели и предсказание
+│   ├── model_service.py               # загрузка артефакта и предсказание
+│   └── predict.py                     # CLI: загрузка модели и предсказание
 └── tests/
     ├── conftest.py                    # доступ к модулям из src
     └── test_predict.py                # smoke-тесты компонента предсказания
@@ -176,6 +182,81 @@ sepal_length,sepal_width,petal_length,petal_width
 5.1,3.5,1.4,0.2
 ```
 
+## API-сервис
+
+Тот же компонент доступен по HTTP. Приложение FastAPI объявлено в
+[`app/api.py`](app/api.py), схемы запроса и ответа — в
+[`app/schemas.py`](app/schemas.py), а загрузка модели и предсказание вынесены
+в [`src/model_service.py`](src/model_service.py): HTTP-слой не знает, как
+устроена модель, и не умеет её обучать.
+
+Запуск сервиса (модель должна быть обучена заранее):
+
+```bash
+python src/train.py
+python -m uvicorn app.api:app --reload
+```
+
+Сервис поднимается на `http://127.0.0.1:8000`. Модель загружается один раз при
+старте приложения, а не на каждый запрос.
+
+### GET /health
+
+Состояние сервиса и готовность модели:
+
+```bash
+curl http://127.0.0.1:8000/health
+```
+
+```json
+{"status":"ok","model_ready":true}
+```
+
+Если артефакт модели не найден, сервис всё равно запускается, но возвращает
+`"model_ready": false`, а `/predict` отвечает кодом 503.
+
+### POST /predict
+
+Принимает признаки одного объекта и возвращает класс:
+
+```bash
+curl -X POST http://127.0.0.1:8000/predict   -H "Content-Type: application/json"   -d '{"sepal_length":5.1,"sepal_width":3.5,"petal_length":1.4,"petal_width":0.2}'
+```
+
+```json
+{"prediction":0,"predicted_name":"setosa"}
+```
+
+Валидацию входных данных выполняет Pydantic: все четыре поля обязательны и
+должны быть числами больше нуля. При нарушении контракта FastAPI отвечает
+кодом **422** и описывает, какое поле неверно, — приложение при этом не падает:
+
+```json
+{"detail":[{"type":"missing","loc":["body","petal_width"],"msg":"Field required"}]}
+```
+
+| Код ответа | Когда возникает |
+| --- | --- |
+| 200 | запрос корректен, предсказание выполнено |
+| 422 | ошибка валидации Pydantic (нет поля, неверный тип, значение ≤ 0) |
+| 503 | артефакт модели недоступен, нужно выполнить `python src/train.py` |
+
+### Документация
+
+FastAPI строит описание API по тем же Pydantic-схемам:
+
+- `http://127.0.0.1:8000/docs` — Swagger UI;
+- `http://127.0.0.1:8000/openapi.json` — машиночитаемая схема OpenAPI 3.1.
+
+### Путь к модели
+
+Артефакт берётся из переменной окружения `MODEL_PATH`, а если она не задана —
+из `src/config.py` (`models/model.pkl`). Это нужно для запуска в контейнере:
+
+```bash
+MODEL_PATH=/app/models/model.pkl python -m uvicorn app.api:app
+```
+
 ## Тестирование
 
 ```bash
@@ -206,7 +287,7 @@ pytest
 | Параметр | Значение | Назначение |
 | --- | --- | --- |
 | `PROJECT_ROOT` | каталог репозитория | база для всех путей |
-| `MODEL_PATH` | `models/model.pkl` | артефакт модели |
+| `MODEL_PATH` | `models/model.pkl` | артефакт модели (переопределяется переменной окружения `MODEL_PATH`) |
 | `SAMPLE_PATH` | `data_sample/sample.csv` | входные данные по умолчанию |
 | `FEATURE_COLUMNS` | 4 столбца Iris | интерфейс входных данных |
 | `OUTPUT_FORMATS` | `("text", "json")` | допустимые форматы вывода `predict.py` |
@@ -219,7 +300,9 @@ pytest
 аргументами командной строки, не меняя код.
 
 Зависимости зафиксированы по версиям в `requirements.txt`:
-`scikit-learn==1.7.2`, `joblib==1.5.2`, `pandas==2.3.3`, `pytest==8.4.2`.
+`scikit-learn`, `joblib`, `pandas` — модель; `fastapi`, `uvicorn`, `pydantic` —
+API-сервис; `pytest`, `httpx` — тесты. Точные версии указаны в
+`requirements.txt`.
 Проект проверен на Python 3.13.
 
 ## Публикация в GitVerse
