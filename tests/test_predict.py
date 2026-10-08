@@ -12,17 +12,9 @@ import pytest
 
 import config
 import predict
-import train
 
-
-@pytest.fixture(scope="module")
-def model_path(tmp_path_factory):
-    """Обучает модель один раз во временный каталог и возвращает путь к артефакту."""
-    path = tmp_path_factory.mktemp("models") / "model.pkl"
-    model, accuracy = train.train_model()
-    assert 0.0 <= accuracy <= 1.0
-    train.save_model(model, path)
-    return path
+# Артефакт модели дает общая фикстура trained_model_path из tests/conftest.py:
+# модель обучается один раз за сессию и используется всеми уровнями проверок.
 
 
 def test_sample_file_exists():
@@ -35,8 +27,8 @@ def test_read_features_returns_four_numbers():
     assert all(isinstance(value, float) for value in features)
 
 
-def test_model_loads_and_predicts_known_format(model_path):
-    model = predict.load_model(model_path)
+def test_model_loads_and_predicts_known_format(trained_model_path):
+    model = predict.load_model(trained_model_path)
     features = predict.read_features(config.SAMPLE_PATH)
 
     predicted_class, predicted_name = predict.predict(model, features)
@@ -86,18 +78,18 @@ def run_predict_script(*args):
     )
 
 
-def test_predict_script_runs_end_to_end(model_path):
+def test_predict_script_runs_end_to_end(trained_model_path):
     """predict.py запускается как отдельный процесс и печатает ожидаемые строки."""
-    result = run_predict_script("--model-path", str(model_path))
+    result = run_predict_script("--model-path", str(trained_model_path))
 
     assert result.returncode == 0, result.stderr
     assert "predicted_class=" in result.stdout
     assert "predicted_name=" in result.stdout
 
 
-def test_predict_script_json_output(model_path):
+def test_predict_script_json_output(trained_model_path):
     """С --format json вывод целиком разбирается как один JSON-объект."""
-    result = run_predict_script("--model-path", str(model_path), "--format", "json")
+    result = run_predict_script("--model-path", str(trained_model_path), "--format", "json")
 
     assert result.returncode == 0, result.stderr
     payload = json.loads(result.stdout)
@@ -116,8 +108,8 @@ def test_predict_script_json_error_goes_to_stderr(tmp_path):
     assert "no_such_model.pkl" in payload["error"]
 
 
-def test_predict_script_rejects_unknown_format(model_path):
-    result = run_predict_script("--model-path", str(model_path), "--format", "xml")
+def test_predict_script_rejects_unknown_format(trained_model_path):
+    result = run_predict_script("--model-path", str(trained_model_path), "--format", "xml")
 
     assert result.returncode != 0
     assert "invalid choice" in result.stderr
