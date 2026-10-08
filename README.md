@@ -46,6 +46,9 @@
 ml-integration-lab/
 ├── README.md                          # документация проекта
 ├── .gitignore                         # окружения, кэши, артефакты, файлы IDE
+├── .dockerignore                      # что не попадает в контекст сборки образа
+├── Dockerfile                         # образ API-сервиса
+├── pytest.ini                         # конфигурация тестов
 ├── requirements.txt                   # зафиксированные зависимости
 ├── notebooks/
 │   └── source_experiment.ipynb        # безопасная копия исходной заготовки
@@ -64,8 +67,10 @@ ml-integration-lab/
 │   ├── model_service.py               # загрузка артефакта и предсказание
 │   └── predict.py                     # CLI: загрузка модели и предсказание
 └── tests/
-    ├── conftest.py                    # доступ к модулям из src
-    └── test_predict.py                # smoke-тесты компонента предсказания
+    ├── conftest.py                    # общие фикстуры: модель, TestClient
+    ├── test_model_service.py          # модульные тесты прикладного слоя
+    ├── test_api.py                    # тесты HTTP-маршрутов и валидации
+    └── test_predict.py                # smoke-тесты CLI-сценария
 ```
 
 `models/model.pkl` намеренно исключен из репозитория: это воспроизводимый
@@ -299,6 +304,68 @@ pytest
 pytest tests/test_api.py -v
 pytest tests/test_model_service.py -v
 ```
+
+## Запуск в Docker
+
+Требуется Docker (проверено на Docker Desktop 28.5.1). Образ описан в
+[`Dockerfile`](Dockerfile), контекст сборки ограничен файлом
+[`.dockerignore`](.dockerignore).
+
+**Перед сборкой обучите модель:** артефакт `models/model.pkl` не хранится в Git,
+а внутрь образа копируется готовым — обучение при сборке и в обработчике
+запроса не выполняется.
+
+```bash
+python src/train.py
+docker build -t ml-api:practice5 .
+docker image ls ml-api
+```
+
+Запуск контейнера: порт 8000 контейнера публикуется как порт 8080 хоста, путь к
+модели передаётся переменной окружения:
+
+```bash
+docker run -d --name ml-api-p5 -p 8080:8000 -e MODEL_PATH=/app/models/model.pkl ml-api:practice5
+docker ps
+```
+
+Если порт 8080 на хосте уже занят другим приложением, подставьте любой
+свободный порт — меняется только левая часть: `-p 8088:8000`.
+
+Проверка API с хоста:
+
+```bash
+curl http://localhost:8080/health
+# {"status":"ok","model_ready":true}
+
+curl -X POST http://localhost:8080/predict   -H "Content-Type: application/json"   --data-raw '{"sepal_length":5.1,"sepal_width":3.5,"petal_length":1.4,"petal_width":0.2}'
+# {"prediction":0,"predicted_name":"setosa"}
+```
+
+Диагностика и остановка:
+
+```bash
+docker logs ml-api-p5           # журнал uvicorn и запросы
+docker exec ml-api-p5 pwd       # /app — каталог из WORKDIR
+docker exec ml-api-p5 ls -la /app
+docker stats --no-stream ml-api-p5
+docker stop ml-api-p5
+docker rm ml-api-p5
+```
+
+Контейнер можно удалить и создать заново из того же образа — результат не
+меняется, потому что состояние целиком описано образом и параметрами запуска.
+
+Что важно в этом Dockerfile:
+
+| Инструкция | Назначение |
+| --- | --- |
+| `FROM python:3.12-slim` | базовый образ с явным тегом версии |
+| `WORKDIR /app` | рабочий каталог **внутри** образа; каталог на хосте не меняется |
+| `COPY requirements.txt` → `RUN pip install` | зависимости ставятся до копирования кода, поэтому при правке кода слой с зависимостями берётся из кеша |
+| `COPY app src models` | код приложения и готовый артефакт модели |
+| `EXPOSE 8000` | документирует порт приложения, но **не** открывает порт на хосте — это делает `-p` |
+| `CMD … --host 0.0.0.0` | внутри контейнера сервис должен слушать все интерфейсы: `127.0.0.1` был бы доступен только изнутри контейнера |
 
 ## Конфигурация и зависимости
 
