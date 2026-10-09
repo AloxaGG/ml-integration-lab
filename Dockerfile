@@ -14,9 +14,10 @@ WORKDIR /app
 COPY requirements.txt ./
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Код приложения и артефакт модели
+# Код приложения, клиентская страница и артефакт модели
 COPY app ./app
 COPY src ./src
+COPY static ./static
 COPY models ./models
 
 # Документирует порт приложения; публикацию на хост задает -p при docker run
