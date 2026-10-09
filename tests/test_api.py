@@ -28,10 +28,10 @@ def test_predict_returns_prediction(client):
 
     assert response.status_code == 200
     body = response.json()
-    assert set(body) == {"prediction", "predicted_name"}
-    assert isinstance(body["prediction"], int)
-    assert body["prediction"] in (0, 1, 2)
-    assert body["predicted_name"] == "setosa"
+    assert set(body) == {"class_id", "class_name"}
+    assert isinstance(body["class_id"], int)
+    assert body["class_id"] in (0, 1, 2)
+    assert body["class_name"] == "setosa"
 
 
 @pytest.mark.parametrize(
@@ -57,9 +57,10 @@ def test_predict_rejects_invalid_payload(client, payload):
 def test_validation_error_describes_missing_field(client):
     payload = {k: v for k, v in VALID_PAYLOAD.items() if k != "petal_width"}
 
-    detail = client.post("/predict", json=payload).json()["detail"]
+    body = client.post("/predict", json=payload).json()
 
-    assert any("petal_width" in error["loc"] for error in detail)
+    assert "petal_width" in body["detail"]
+    assert any("petal_width" in error["loc"] for error in body["errors"])
 
 
 def test_service_stays_alive_after_invalid_request(client):
@@ -94,3 +95,68 @@ def test_openapi_describes_contract(client):
 
 def test_docs_page_is_available(client):
     assert client.get("/docs").status_code == 200
+
+
+def test_features_returns_profile_for_all_fields(client):
+    """GET /features отдает профиль в формате, пригодном фронтенду без преобразования."""
+    response = client.get("/features")
+
+    assert response.status_code == 200
+    profile = response.json()
+    assert set(profile) == set(VALID_PAYLOAD)
+    for limits in profile.values():
+        assert set(limits) == {"min", "max", "mean"}
+        assert limits["min"] <= limits["mean"] <= limits["max"]
+
+
+def test_predict_accepts_boundary_values(client):
+    """Границы профиля включительны: объект на границе проходит проверку."""
+    profile = client.get("/features").json()
+    payload = {name: limits["max"] for name, limits in profile.items()}
+
+    response = client.post("/predict", json=payload)
+
+    assert response.status_code == 200
+    assert response.json()["class_id"] in (0, 1, 2)
+
+
+def test_predict_rejects_value_out_of_profile_range(client):
+    """Значение вне диапазона отклоняется до обращения к модели."""
+    profile = client.get("/features").json()
+    too_large = profile["petal_width"]["max"] + 2
+    payload = {**VALID_PAYLOAD, "petal_width": too_large}
+
+    response = client.post("/predict", json=payload)
+
+    assert response.status_code == 422
+    body = response.json()
+    assert "petal_width" in body["detail"]
+    violation = body["errors"][0]
+    assert violation["feature"] == "petal_width"
+    assert violation["value"] == too_large
+    assert violation["min"] == profile["petal_width"]["min"]
+    assert violation["max"] == profile["petal_width"]["max"]
+
+
+def test_out_of_range_request_does_not_reach_the_model(client, model_service):
+    """Отклоненный объект не доходит до модели: предсказание не выполняется."""
+    calls = []
+    original_predict_one = model_service.predict_one
+    model_service.predict_one = lambda features: calls.append(features) or original_predict_one(features)
+    try:
+        client.post("/predict", json={**VALID_PAYLOAD, "sepal_length": 99.0})
+        assert calls == []
+        client.post("/predict", json=VALID_PAYLOAD)
+        assert len(calls) == 1
+    finally:
+        model_service.predict_one = original_predict_one
+
+
+def test_index_page_is_served_as_html(client):
+    """GET / отдает клиентскую страницу с того же приложения."""
+    response = client.get("/")
+
+    assert response.status_code == 200
+    assert response.headers["content-type"].startswith("text/html")
+    assert "<form id=\"form\">" in response.text
+    assert "/features" in response.text

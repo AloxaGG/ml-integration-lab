@@ -10,6 +10,7 @@ on:
       - app/**
       - src/**
       - client/**
+      - static/**
       - tests/**
       - Dockerfile
       - requirements.txt
@@ -81,6 +82,8 @@ jobs:
             sleep 2
           done
           curl -fs http://localhost:8080/health
+          curl -fs http://localhost:8080/features
+          curl -fs -o /dev/null http://localhost:8080/
           curl -fs -X POST http://localhost:8080/predict \
             -H "Content-Type: application/json" \
             --data-raw '{"sepal_length":5.1,"sepal_width":3.5,"petal_length":1.4,"petal_width":0.2}'
