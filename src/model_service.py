@@ -58,7 +58,11 @@ class ModelService:
         return self._model is not None or self.path.is_file()
 
     def predict_one(self, features) -> dict:
-        """Предсказание для одного объекта: список из 4 признаков -> dict."""
+        """Предсказание для одного объекта: список из 4 признаков -> dict.
+
+        Возвращает {"class_id": int, "class_name": str} — те же поля, что отдает
+        маршрут POST /predict.
+        """
         features = list(features)
         if len(features) != len(FEATURE_COLUMNS):
             raise ValueError(
@@ -68,8 +72,8 @@ class ModelService:
         model = self.load()
         predicted_class = int(model.predict([features])[0])
         return {
-            "prediction": predicted_class,
-            "predicted_name": TARGET_NAMES[predicted_class],
+            "class_id": predicted_class,
+            "class_name": TARGET_NAMES[predicted_class],
         }
 
 
