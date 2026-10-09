@@ -17,10 +17,10 @@ VIRGINICA = [6.7, 3.0, 5.2, 2.3]
 def test_predict_one_returns_expected_structure(model_service):
     result = model_service.predict_one(SETOSA)
 
-    assert set(result) == {"prediction", "predicted_name"}
-    assert isinstance(result["prediction"], int)
-    assert result["prediction"] in (0, 1, 2)
-    assert result["predicted_name"] == config.TARGET_NAMES[result["prediction"]]
+    assert set(result) == {"class_id", "class_name"}
+    assert isinstance(result["class_id"], int)
+    assert result["class_id"] in (0, 1, 2)
+    assert result["class_name"] == config.TARGET_NAMES[result["class_id"]]
 
 
 @pytest.mark.parametrize(
@@ -28,7 +28,7 @@ def test_predict_one_returns_expected_structure(model_service):
     [pytest.param(SETOSA, "setosa", id="setosa"), pytest.param(VIRGINICA, "virginica", id="virginica")],
 )
 def test_predict_one_recognizes_typical_objects(model_service, features, expected_name):
-    assert model_service.predict_one(features)["predicted_name"] == expected_name
+    assert model_service.predict_one(features)["class_name"] == expected_name
 
 
 def test_predict_one_rejects_wrong_number_of_features(model_service):
@@ -57,6 +57,6 @@ def test_service_uses_saved_artifact(trained_model_path):
     service = ModelService(trained_model_path)
     model_from_disk = joblib.load(trained_model_path)
 
-    assert service.predict_one(VIRGINICA)["prediction"] == int(
+    assert service.predict_one(VIRGINICA)["class_id"] == int(
         model_from_disk.predict([VIRGINICA])[0]
     )
