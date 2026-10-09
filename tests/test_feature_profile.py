@@ -8,6 +8,7 @@ import numpy as np
 import pytest
 
 import config
+from src.dataset import check_dataset_matches_config, load_dataset
 from src.feature_profile import (
     build_feature_profile,
     describe_violations,
@@ -91,3 +92,25 @@ def test_message_mentions_feature_value_and_limits():
 
     assert "sepal_length" in message
     assert "0.5" in message
+
+
+def test_profile_is_built_from_the_training_dataset():
+    """Профиль и обучение берут данные из одного источника и не могут разойтись."""
+    features, _ = load_dataset()
+
+    assert get_feature_profile() == build_feature_profile(features)
+
+
+def test_profile_bounds_cover_every_training_object():
+    """Ни один объект обучающего набора не был бы отклонён проверкой."""
+    features, _ = load_dataset()
+    profile = get_feature_profile()
+
+    for row in features:
+        sample = dict(zip(config.FEATURE_COLUMNS, (float(value) for value in row)))
+        assert validate_feature_ranges(sample, profile) == []
+
+
+def test_dataset_matches_declared_interface():
+    """Набор согласован с FEATURE_COLUMNS и TARGET_NAMES из config."""
+    check_dataset_matches_config()

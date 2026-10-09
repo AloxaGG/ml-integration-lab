@@ -8,23 +8,23 @@ import argparse
 from pathlib import Path
 
 import joblib
-from sklearn.datasets import load_iris
 from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import accuracy_score
 from sklearn.model_selection import train_test_split
 
 from config import MAX_ITER, MODEL_PATH, RANDOM_STATE, TEST_SIZE
+from dataset import load_dataset
 
 
 def train_model():
     """Обучает модель и возвращает ее вместе с accuracy на отложенной выборке."""
-    iris = load_iris()
+    features, target = load_dataset()
     X_train, X_test, y_train, y_test = train_test_split(
-        iris.data,
-        iris.target,
+        features,
+        target,
         test_size=TEST_SIZE,
         random_state=RANDOM_STATE,
-        stratify=iris.target,
+        stratify=target,
     )
 
     model = LogisticRegression(max_iter=MAX_ITER, random_state=RANDOM_STATE)

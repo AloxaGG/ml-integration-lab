@@ -120,6 +120,7 @@ ml-integration-lab/
 ├── src/
 │   ├── __init__.py                    # пакет прикладного слоя
 │   ├── config.py                      # пути и параметры проекта
+│   ├── dataset.py                     # единый источник обучающего набора
 │   ├── train.py                       # обучение и сохранение модели
 │   ├── model_service.py               # загрузка артефакта и предсказание
 │   ├── feature_profile.py             # профиль признаков и проверка границ
@@ -335,7 +336,11 @@ MODEL_PATH=/app/models/model.pkl python -m uvicorn app.api:app
 
 Профиль — это минимум, максимум и среднее по каждому признаку обучающего набора
 Iris. Он вычисляется один раз при старте приложения и дальше берётся из кеша
-([`src/feature_profile.py`](src/feature_profile.py)). Код перенесён из
+([`src/feature_profile.py`](src/feature_profile.py)). Данные берутся из
+[`src/dataset.py`](src/dataset.py) — из того же места, что и обучение модели,
+поэтому профиль не может разойтись с тем, на чём модель училась; за этим следят
+тесты `test_profile_is_built_from_the_training_dataset` и
+`test_profile_bounds_cover_every_training_object`. Код перенесён из
 экспериментов `notebooks/source_experiment_updated.ipynb` (построение профиля) и
 `notebooks/new_functionality.ipynb` (проверка объекта) — ноутбуки сохранены как
 воспроизводимые эксперименты, бизнес-логика живёт в модулях проекта.
@@ -443,7 +448,7 @@ pytest
 Ожидаемый результат:
 
 ```text
-45 passed
+48 passed
 ```
 
 Проверки разделены по уровням — так понятно, на каком слое возникла ошибка:

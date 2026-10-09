@@ -8,14 +8,17 @@
 
 Код перенесён из экспериментов `notebooks/source_experiment_updated.ipynb`
 (построение профиля) и `notebooks/new_functionality.ipynb` (проверка объекта).
-"""
 
-from sklearn.datasets import load_iris
+Данные берутся из `src/dataset.py` — из того же места, что и обучение модели,
+чтобы профиль не мог разойтись с тем, на чем модель училась.
+"""
 
 try:  # импорт как часть пакета src (API-слой, тесты)
     from .config import FEATURE_COLUMNS
+    from .dataset import load_dataset
 except ImportError:  # запуск скриптов из каталога src
     from config import FEATURE_COLUMNS
+    from dataset import load_dataset
 
 # Границы включительны: значение, равное min или max, считается допустимым.
 Profile = dict[str, dict[str, float]]
@@ -39,7 +42,7 @@ def get_feature_profile() -> Profile:
     """Профиль признаков: считается один раз и дальше берётся из кеша."""
     global _PROFILE_CACHE
     if _PROFILE_CACHE is None:
-        _PROFILE_CACHE = build_feature_profile(load_iris().data)
+        _PROFILE_CACHE = build_feature_profile(load_dataset()[0])
     # копия, чтобы вызывающий код не мог изменить кеш
     return {name: dict(limits) for name, limits in _PROFILE_CACHE.items()}
 
